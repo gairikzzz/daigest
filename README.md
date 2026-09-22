@@ -1,6 +1,6 @@
 # dAIgest
 
-An India-first news experience that combines concise story cards with an article-level conversational explainer. The production feed is designed to use Currents News API for current headlines and search, while keeping sample stories as a graceful fallback.
+An India-first news experience that combines concise story cards with an article-level conversational explainer. The production feed uses NewsData.io for current headlines and search, while keeping sample stories as a graceful fallback.
 
 ## Run locally
 
@@ -10,18 +10,18 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Set `CURRENTS_API_KEY` in `.env.local` to enable live news. The key is read only by `app/api/news/route.ts` and is never sent to the browser.
+Set `NEWSDATA_API_KEY` in `.env.local` to enable live news. The key is read only by `app/api/news/route.ts` and is never sent to the browser.
 
 ## Important paths
 
 - `app/page.tsx` — editorial feed, category navigation, search, briefing and Ask dAIgest UI
-- `app/api/news/route.ts` — server-side Currents Latest News and Search integration
+- `app/api/news/route.ts` — server-side NewsData Latest News integration
 - `app/editorial.css` — the complete visual system for the news experience
 - `.openai/hosting.json` — existing ChatGPT Sites deployment metadata
 
 ## Production
 
-The current production Site is [daigest-news.gairikz.chatgpt.site](https://daigest-news.gairikz.chatgpt.site). Configure `CURRENTS_API_KEY` as a secret in the hosting environment; do not commit it.
+The current production Site is [daigest-news.gairikz.chatgpt.site](https://daigest-news.gairikz.chatgpt.site). Configure `NEWSDATA_API_KEY` as a secret in the hosting environment; do not commit it.
 
 ## Starter/runtime notes
 

@@ -29,10 +29,14 @@ export async function GET(request: Request) {
   const category = requestUrl.searchParams.get("category") ?? "Top stories";
   const upstream = new URL(`https://api.currentsapi.services/v2/${query ? "search" : "latest-news"}`);
   upstream.searchParams.set("language", "en");
-  upstream.searchParams.set("country", "IN");
+  // Currents expects the lowercase ISO region code. Keep every domestic feed
+  // explicitly India-first; the World tab is the only unscoped feed.
+  if (category !== "World") upstream.searchParams.set("country", "in");
   upstream.searchParams.set("page_size", "12");
   if (query) upstream.searchParams.set("keywords", query.slice(0, 180));
-  if (category !== "Top stories" && CATEGORY_TO_CURRENTS[category]) upstream.searchParams.set("category", CATEGORY_TO_CURRENTS[category]);
+  if (category !== "Top stories" && category !== "India" && CATEGORY_TO_CURRENTS[category]) {
+    upstream.searchParams.set("category", CATEGORY_TO_CURRENTS[category]);
+  }
 
   try {
     const response = await fetch(upstream, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });

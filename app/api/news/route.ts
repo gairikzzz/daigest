@@ -21,10 +21,11 @@ type OpenAIResponse = {
 };
 
 const CLASSIFIED_CATEGORIES = new Set([
-  "World", "Local", "Business", "Technology", "Entertainment", "Sports", "Science", "Health",
+  "India", "World", "Local", "Business", "Technology", "Entertainment", "Sports", "Science", "Health",
 ]);
 
 const CATEGORY_RULES: Record<string, string> = {
+  India: "Materially about India, Indian institutions, Indian public life, or events with a direct and substantial Indian connection; not merely published by an Indian outlet.",
   World: "International or cross-border affairs with significance beyond one country's domestic news.",
   Local: "Indian state, city, district, civic, or other clearly regional/local affairs.",
   Business: "Companies, markets, banking, finance, trade, jobs, or the economy.",

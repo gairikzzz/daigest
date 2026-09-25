@@ -17,9 +17,8 @@ type CurrentsArticle = {
   published?: string; category?: string[];
 };
 
-type OpenAIResponse = {
-  output_text?: string;
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+type GeminiResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
 };
 
 const CLASSIFIED_CATEGORIES = new Set([
@@ -38,22 +37,24 @@ const CATEGORY_RULES: Record<string, string> = {
   Health: "Medicine, public health, healthcare, disease, wellbeing, or medical research.",
 };
 
-function getOpenAIText(payload: OpenAIResponse) {
-  if (payload.output_text) return payload.output_text;
-  for (const item of payload.output ?? []) {
-    for (const content of item.content ?? []) {
-      if (content.type === "output_text" && content.text) return content.text;
-    }
-  }
-  return "";
+function getGeminiText(payload: GeminiResponse) {
+  return payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
 }
 
-async function filterCategoryWithOpenAI(
+type EnrichedArticle = { article: CurrentsArticle; questions: string[] };
+
+const fallbackQuestions = ["What happened?", "Why does this matter?", "What should I watch next?"];
+
+async function enrichArticlesWithGemini(
   articles: CurrentsArticle[],
-  category: string,
+  category: string | undefined,
   apiKey?: string,
-) {
-  if (!apiKey || !CLASSIFIED_CATEGORIES.has(category) || articles.length === 0) return articles;
+): Promise<EnrichedArticle[]> {
+  if (!apiKey || articles.length === 0) {
+    return articles.map((article) => ({ article, questions: fallbackQuestions }));
+  }
+
+  const shouldFilter = Boolean(category && CLASSIFIED_CATEGORIES.has(category));
 
   const candidates = articles.map((article, index) => ({
     id: String(index),
@@ -62,58 +63,68 @@ async function filterCategoryWithOpenAI(
   }));
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
-        model: "gpt-6-luna",
-        reasoning: { effort: "none" },
-        input: [
-          {
-            role: "system",
-            content: "You are a strict news-feed editor. Judge every supplied story independently. Keep a story only when its headline and description materially match the requested section. Reject weak, incidental, misleading, or ambiguous matches. Return every candidate id exactly once.",
-          },
+        systemInstruction: { parts: [{
+          text: "You are a precise news editor. Return every candidate id exactly once. When filtering is enabled, reject weak, incidental, misleading, or ambiguous category matches. When filtering is disabled, mark every story as matching. For every story, write exactly three short, natural starter questions that are specific to its headline and description. Questions must help a reader understand names, context, consequences, comparisons, or what happens next. Do not use generic prompts such as 'What happened?', 'Why does this matter?', or 'What should I watch next?'.",
+        }] },
+        contents: [
           {
             role: "user",
-            content: JSON.stringify({ category, definition: CATEGORY_RULES[category], candidates }),
+            parts: [{ text: JSON.stringify({
+              filteringEnabled: shouldFilter,
+              category: category ?? "Unfiltered results",
+              definition: category ? CATEGORY_RULES[category] : undefined,
+              candidates,
+            }) }],
           },
         ],
-        text: {
-          verbosity: "low",
-          format: {
-            type: "json_schema",
-            name: "category_validation",
-            strict: true,
-            schema: {
+        generationConfig: {
+          temperature: 0.15,
+          maxOutputTokens: 2400,
+          responseMimeType: "application/json",
+          responseJsonSchema: {
               type: "object",
               properties: {
                 decisions: {
                   type: "array",
                   items: {
                     type: "object",
-                    properties: { id: { type: "string" }, matches: { type: "boolean" } },
-                    required: ["id", "matches"],
+                    properties: {
+                      id: { type: "string" },
+                      matches: { type: "boolean" },
+                      questions: { type: "array", items: { type: "string" } },
+                    },
+                    required: ["id", "matches", "questions"],
                     additionalProperties: false,
                   },
                 },
               },
               required: ["decisions"],
               additionalProperties: false,
-            },
           },
         },
-        max_output_tokens: 900,
       }),
     });
-    if (!response.ok) return articles;
-    const payload = await response.json() as OpenAIResponse;
-    const parsed = JSON.parse(getOpenAIText(payload)) as { decisions?: Array<{ id: string; matches: boolean }> };
-    const accepted = new Set((parsed.decisions ?? []).filter((item) => item.matches).map((item) => item.id));
-    return articles.filter((_, index) => accepted.has(String(index)));
+    if (!response.ok) return articles.map((article) => ({ article, questions: fallbackQuestions }));
+    const payload = await response.json() as GeminiResponse;
+    const parsed = JSON.parse(getGeminiText(payload)) as {
+      decisions?: Array<{ id: string; matches: boolean; questions: string[] }>;
+    };
+    const decisions = new Map((parsed.decisions ?? []).map((item) => [item.id, item]));
+    if (decisions.size === 0) return articles.map((article) => ({ article, questions: fallbackQuestions }));
+    return articles.flatMap((article, index) => {
+      const decision = decisions.get(String(index));
+      if (shouldFilter && !decision?.matches) return [];
+      const questions = (decision?.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
+      return [{ article, questions: questions.length >= 2 ? questions : fallbackQuestions }];
+    });
   } catch {
-    return articles;
+    return articles.map((article) => ({ article, questions: fallbackQuestions }));
   }
 }
 
@@ -162,10 +173,12 @@ export async function GET(request: Request) {
       );
     }
     const candidates = (payload.news ?? []).filter((article) => article.title && article.url);
-    const matchedArticles = isSearch
-      ? candidates
-      : await filterCategoryWithOpenAI(candidates, category, bindings.OPENAI_API_KEY);
-    const stories = matchedArticles.slice(0, 12).map((article, index) => {
+    const enrichedArticles = await enrichArticlesWithGemini(
+      candidates,
+      isSearch || category === "Top stories" ? undefined : category,
+      bindings.GEMINI_API_KEY,
+    );
+    const stories = enrichedArticles.slice(0, 12).map(({ article, questions }, index) => {
       const publisher = publisherFromUrl(article.url);
       const digest = article.description?.trim() || "Open the original report for the full story and latest details.";
       return {
@@ -173,7 +186,7 @@ export async function GET(request: Request) {
         category: category !== "Top stories" ? category : CURRENTS_TO_CATEGORY[article.category?.[0] ?? ""] ?? "India",
         publishedAt: article.published || new Date().toISOString(), headline: article.title, digest, why: digest,
         sources: [publisher.name], sourceDomain: publisher.domain, sourceUrl: article.url, image: article.image || null,
-        questions: ["What happened?", "Why does this matter?", "What should I watch next?"], live: true,
+        questions, live: true,
       };
     });
     return Response.json(

@@ -42,12 +42,6 @@ function StoryPhoto({ story }: { story: Story }) {
   return <div className="photo-slot" role="img" aria-label={`Photo space for ${story.headline}`}><ImageIcon size={28} strokeWidth={1.3}/><span>Story photo</span></div>;
 }
 
-function answerFor(story: Story, question: string) {
-  if (question.toLowerCase().includes("brics")) return "BRICS is an intergovernmental group of major emerging economies. In this story, members are exploring a payment network that could make trade settlement faster and less reliant on existing systems.";
-  if (question.toLowerCase().includes("repo")) return "The repo rate is the interest rate at which the RBI lends short-term funds to commercial banks. Since it remains unchanged, lending rates are unlikely to move immediately for that reason alone.";
-  return story.live ? `Based on the available report: ${story.digest}` : story.why;
-}
-
 function FittingPromptTags({ questions, onAsk }: { questions: string[]; onAsk: (question: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const measure = useRef<HTMLDivElement>(null);
@@ -81,16 +75,47 @@ function FittingPromptTags({ questions, onAsk }: { questions: string[]; onAsk: (
   </div>;
 }
 
-type ChatTurn = { question: string; answer: string };
+type Citation = { title: string; url: string };
+type ChatTurn = { id: string; question: string; answer: string; citations?: Citation[]; pending?: boolean };
 function StoryCard({ story }: { story: Story }) {
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [asking, setAsking] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
-  function ask(value: string) {
+  async function ask(value: string) {
     const question = value.trim();
-    if (!question) return;
+    if (!question || asking) return;
+    const id = `${Date.now()}-${Math.random()}`;
+    const priorTurns = turns.filter((turn) => !turn.pending);
     setInput("");
-    setTurns((current) => [...current, { question, answer: answerFor(story, question) }]);
+    setAsking(true);
+    setTurns((current) => [...current, { id, question, answer: "Thinking…", pending: true }]);
+    try {
+      const response = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          question,
+          story: {
+            headline: story.headline, digest: story.digest, category: story.category,
+            source: story.sources[0], sourceUrl: story.sourceUrl, publishedAt: story.publishedAt,
+          },
+          history: priorTurns.map((turn) => ({ question: turn.question, answer: turn.answer })),
+        }),
+      });
+      const payload = await response.json() as { answer?: string; citations?: Citation[]; error?: string };
+      if (!response.ok || !payload.answer) throw new Error(payload.error || "Could not answer that question.");
+      setTurns((current) => current.map((turn) => turn.id === id
+        ? { ...turn, answer: payload.answer!, citations: payload.citations, pending: false }
+        : turn));
+    } catch (error) {
+      setTurns((current) => current.map((turn) => turn.id === id
+        ? { ...turn, answer: (error as Error).message || "I couldn’t answer that right now.", pending: false }
+        : turn));
+    } finally {
+      setAsking(false);
+    }
   }
   useLayoutEffect(() => { if (historyRef.current) historyRef.current.scrollTop = historyRef.current.scrollHeight; }, [turns]);
   const publisher = story.sources[0] || "News source";
@@ -106,9 +131,9 @@ function StoryCard({ story }: { story: Story }) {
       <div className="conversation-label"><span className="conversation-logo"><Sparkles size={13}/></span><strong>Ask dAIgest</strong></div>
       {turns.length > 0 && <div className="chat-history" ref={historyRef} aria-live="polite">{turns.map((turn, index) => <div className="chat-turn" key={index}>
         <div className="chat-message user-message"><p className="current-question">{turn.question}</p><span className="chat-avatar user-avatar" aria-label="You"><UserRound size={13}/></span></div>
-        <div className="chat-message ai-message"><span className="chat-avatar ai-avatar" aria-label="dAIgest"><Sparkles size={12}/></span><p className="current-answer">{turn.answer}</p></div>
+        <div className="chat-message ai-message"><span className="chat-avatar ai-avatar" aria-label="dAIgest"><Sparkles size={12}/></span><div className="answer-stack"><p className={`current-answer ${turn.pending ? "is-thinking" : ""}`}>{turn.answer}</p>{turn.citations && turn.citations.length > 0 && <div className="answer-sources">{turn.citations.slice(0, 3).map((citation) => <a key={citation.url} href={citation.url} target="_blank" rel="noreferrer">{citation.title}</a>)}</div>}</div></div>
       </div>)}</div>}
-      {turns.length === 0 && <FittingPromptTags questions={story.questions} onAsk={ask}/>}<form onSubmit={(event) => { event.preventDefault(); ask(input); }} className="question-input"><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={turns.length ? "Ask a follow-up…" : "Ask about this story…"} aria-label="Ask about this story"/><button disabled={!input.trim()} aria-label="Send question"><Send size={15}/></button></form>
+      {turns.length === 0 && <FittingPromptTags questions={story.questions} onAsk={ask}/>}<form onSubmit={(event) => { event.preventDefault(); void ask(input); }} className="question-input"><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={turns.length ? "Ask a follow-up…" : "Ask about this story…"} aria-label="Ask about this story" disabled={asking}/><button disabled={!input.trim() || asking} aria-label="Send question"><Send size={15}/></button></form>
     </div>
   </article>;
 }

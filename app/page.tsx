@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Clock3, ImageIcon, Search, Send, Sparkles, UserRound } from "lucide-react";
+import { ArrowUpRight, Clock3, ImageIcon, RefreshCw, Search, Send, Sparkles, UserRound } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Story = {
@@ -123,6 +123,7 @@ export default function Home() {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedError, setFeedError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,7 +133,8 @@ export default function Home() {
       try {
         const params = new URLSearchParams({ category });
         if (query.trim()) params.set("q", query.trim());
-        const response = await fetch(`/api/news?${params}`, { signal: controller.signal });
+        params.set("_", String(Date.now()));
+        const response = await fetch(`/api/news?${params}`, { signal: controller.signal, cache: "no-store" });
         const payload = await response.json() as NewsResponse;
         setConfigured(payload.configured);
         if (!response.ok) throw new Error(payload.error || "Could not refresh the feed.");
@@ -142,7 +144,7 @@ export default function Home() {
       } finally { if (!controller.signal.aborted) setLoading(false); }
     }, query.trim() ? 450 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [category, query]);
+  }, [category, query, refreshKey]);
 
   const fallbackStories = useMemo(() => sampleStories.filter((story) =>
     (category === "Top stories" || story.category === category || (category === "India" && story.headline.includes("India"))) &&
@@ -159,7 +161,7 @@ export default function Home() {
       <button className="header-brief" onClick={() => { setBriefing(!briefing); document.getElementById("briefing")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}><Sparkles size={15}/>Your briefing</button>
     </div></header>
     <div className="edition">
-      <div className="edition-heading"><div><p className="eyebrow">A LITTLE NEWS. A LOT MORE CONTEXT.</p><h1>Read less. <span>Understand more.</span></h1></div><span className={`feed-status ${usingLive ? "is-live" : ""}`}><i/>{loading ? "Refreshing…" : usingLive ? "Live via Currents" : "Demo fallback"}</span></div>
+      <div className="edition-heading"><div><p className="eyebrow">A LITTLE NEWS. A LOT MORE CONTEXT.</p><h1>Read less. <span>Understand more.</span></h1></div><button type="button" className={`feed-status ${usingLive ? "is-live" : ""}`} onClick={() => setRefreshKey((value) => value + 1)} disabled={loading} aria-label="Refresh latest news"><i/>{loading ? "Refreshing…" : usingLive ? "Refresh latest news" : "Retry live feed"}<RefreshCw size={11} className={loading ? "is-spinning" : ""}/></button></div>
       <Tabs value={category} onValueChange={(nextCategory) => { setCategory(nextCategory); setQuery(""); }} className="category-nav"><TabsList className="category-list"><TabsTrigger value="Top stories" className="category-tab">Top stories</TabsTrigger>{categories.map((name) => <TabsTrigger key={name} value={name} className="category-tab">{name}</TabsTrigger>)}</TabsList></Tabs>
       <div className="editorial-layout">
         <section className={`feed ${loading ? "is-loading" : ""}`} aria-label="News feed" aria-busy={loading}>

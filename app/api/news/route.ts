@@ -30,12 +30,15 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const query = requestUrl.searchParams.get("q")?.trim() ?? "";
   const category = requestUrl.searchParams.get("category") ?? "Top stories";
-  const upstream = new URL(`https://api.currentsapi.services/v1/${query ? "search" : "latest-news"}`);
+  const isSearch = query.length > 0;
+  const upstream = new URL(isSearch
+    ? "https://api.currentsapi.services/v1/search"
+    : "https://api.currentsapi.services/v1/latest-news");
   upstream.searchParams.set("language", "en");
   upstream.searchParams.set("page_size", "12");
-  if (category !== "World") upstream.searchParams.set("country", "in");
-  if (query) upstream.searchParams.set("keywords", query.slice(0, 180));
-  if (category !== "Top stories" && category !== "India" && CATEGORY_TO_CURRENTS[category]) {
+  if (isSearch || category !== "World") upstream.searchParams.set("country", "in");
+  if (isSearch) upstream.searchParams.set("keywords", query.slice(0, 180));
+  if (!isSearch && category !== "Top stories" && category !== "India" && CATEGORY_TO_CURRENTS[category]) {
     upstream.searchParams.set("category", CATEGORY_TO_CURRENTS[category]);
   }
 

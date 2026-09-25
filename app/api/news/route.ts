@@ -43,7 +43,7 @@ function getGeminiText(payload: GeminiResponse) {
 
 type EnrichedArticle = { article: CurrentsArticle; questions: string[] };
 
-const fallbackQuestions = ["What happened?", "Why does this matter?", "What should I watch next?"];
+const fallbackQuestions = ["What happened?", "Who is involved?", "Why now?", "What changes next?", "What should I watch?"];
 
 async function enrichArticlesWithGemini(
   articles: CurrentsArticle[],
@@ -70,7 +70,7 @@ async function enrichArticlesWithGemini(
       signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         systemInstruction: { parts: [{
-          text: "You are a precise news editor. Return every candidate id exactly once. When filtering is enabled, reject weak, incidental, misleading, or ambiguous category matches. When filtering is disabled, mark every story as matching. For every story, write exactly three short, natural starter questions that are specific to its headline and description. Questions must help a reader understand names, context, consequences, comparisons, or what happens next. Do not use generic prompts such as 'What happened?', 'Why does this matter?', or 'What should I watch next?'.",
+          text: "You are a precise news editor. Return every candidate id exactly once. When filtering is enabled, reject weak, incidental, misleading, or ambiguous category matches. When filtering is disabled, mark every story as matching. For every story, write exactly five crisp starter questions that are specific to its headline and description. Each question must be seven words or fewer and help a reader understand names, context, consequences, comparisons, or what happens next. Do not use generic prompts such as 'What happened?', 'Why does this matter?', or 'What should I watch next?'.",
         }] },
         contents: [
           {
@@ -120,8 +120,8 @@ async function enrichArticlesWithGemini(
     return articles.flatMap((article, index) => {
       const decision = decisions.get(String(index));
       if (shouldFilter && !decision?.matches) return [];
-      const questions = (decision?.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 3);
-      return [{ article, questions: questions.length >= 2 ? questions : fallbackQuestions }];
+      const questions = (decision?.questions ?? []).map((question) => question.trim()).filter(Boolean).slice(0, 5);
+      return [{ article, questions: questions.length >= 3 ? questions : fallbackQuestions }];
     });
   } catch {
     return articles.map((article) => ({ article, questions: fallbackQuestions }));

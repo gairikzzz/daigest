@@ -1,6 +1,6 @@
 # dAIgest
 
-An India-first news experience that combines concise story cards with an article-level conversational explainer. The production feed uses Currents News API for current headlines and worldwide search, then uses a low-cost OpenAI classifier to remove stories that do not match the selected section. Sample stories remain as a graceful fallback.
+An India-first news experience that combines concise story cards with an article-level conversational explainer. The production feed uses Currents News API for current headlines and worldwide search, then uses Gemini 3.5 Flash-Lite to validate categories and generate story-specific starter questions. Ask dAIgest answers from the selected card first and can fetch related global reports through Currents when the card lacks enough context. Sample stories remain as a graceful fallback.
 
 Latest-news responses are not cached by the browser or edge runtime. The feed refreshes on page load, category changes, searches, and the visible **Refresh latest news** control.
 The latest-news candidate batch is capped at 20 articles to stay within Currents' free-tier request limits.
@@ -13,18 +13,19 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Set `CURRENTS_API_KEY` and `OPENAI_API_KEY` in `.env.local` to enable live news and category validation. Both keys are read only by `app/api/news/route.ts` and are never sent to the browser.
+Set `CURRENTS_API_KEY` and `GEMINI_API_KEY` in `.env.local` to enable live news, category validation, and Ask dAIgest. Both keys are read only by server routes and are never sent to the browser.
 
 ## Important paths
 
 - `app/page.tsx` — editorial feed, category navigation, search, briefing and Ask dAIgest UI
-- `app/api/news/route.ts` — server-side Currents Latest News / global Search integration and OpenAI category validation
+- `app/api/news/route.ts` — server-side Currents Latest News / global Search integration, category validation, and starter-question generation
+- `app/api/ask/route.ts` — article-grounded Ask dAIgest answers with optional related-news retrieval and citations
 - `app/editorial.css` — the complete visual system for the news experience
 - `.openai/hosting.json` — existing ChatGPT Sites deployment metadata
 
 ## Production
 
-The current production Site is [daigest-news.gairikz.chatgpt.site](https://daigest-news.gairikz.chatgpt.site). Configure `CURRENTS_API_KEY` and `OPENAI_API_KEY` as secrets in the hosting environment; do not commit them.
+The current production Site is [daigest-news.gairikz.chatgpt.site](https://daigest-news.gairikz.chatgpt.site). Configure `CURRENTS_API_KEY` and `GEMINI_API_KEY` as secrets in the hosting environment; do not commit them.
 
 ## Starter/runtime notes
 

@@ -160,7 +160,7 @@ export default function Home() {
     </div></header>
     <div className="edition">
       <div className="edition-heading"><div><p className="eyebrow">A LITTLE NEWS. A LOT MORE CONTEXT.</p><h1>Read less. <span>Understand more.</span></h1></div><span className={`feed-status ${usingLive ? "is-live" : ""}`}><i/>{loading ? "Refreshing…" : usingLive ? "Live via Currents" : "Demo fallback"}</span></div>
-      <Tabs value={category} onValueChange={setCategory} className="category-nav"><TabsList className="category-list"><TabsTrigger value="Top stories" className="category-tab">Top stories</TabsTrigger>{categories.map((name) => <TabsTrigger key={name} value={name} className="category-tab">{name}</TabsTrigger>)}</TabsList></Tabs>
+      <Tabs value={category} onValueChange={(nextCategory) => { setCategory(nextCategory); setQuery(""); }} className="category-nav"><TabsList className="category-list"><TabsTrigger value="Top stories" className="category-tab">Top stories</TabsTrigger>{categories.map((name) => <TabsTrigger key={name} value={name} className="category-tab">{name}</TabsTrigger>)}</TabsList></Tabs>
       <div className="editorial-layout">
         <section className={`feed ${loading ? "is-loading" : ""}`} aria-label="News feed" aria-busy={loading}>
           {feedError && <div className="feed-notice">Live refresh paused. Showing the last available stories.</div>}

@@ -139,7 +139,9 @@ export async function GET(request: Request) {
     ? "https://api.currentsapi.services/v2/search"
     : "https://api.currentsapi.services/v2/latest-news");
   upstream.searchParams.set("language", "en");
-  upstream.searchParams.set("page_size", isSearch ? "12" : "30");
+  // Currents' free tier caps page_size at 20. A larger value makes the
+  // upstream return 400, which prevents the feed from refreshing.
+  upstream.searchParams.set("page_size", isSearch ? "12" : "20");
   if (!isSearch && category !== "World") upstream.searchParams.set("country", "in");
   if (isSearch) upstream.searchParams.set("keywords", query.slice(0, 180));
   if (!isSearch && category !== "Top stories" && category !== "India" && CATEGORY_TO_CURRENTS[category]) {

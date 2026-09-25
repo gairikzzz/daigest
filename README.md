@@ -3,6 +3,7 @@
 An India-first news experience that combines concise story cards with an article-level conversational explainer. The production feed uses Currents News API for current headlines and worldwide search, then uses a low-cost OpenAI classifier to remove stories that do not match the selected section. Sample stories remain as a graceful fallback.
 
 Latest-news responses are not cached by the browser or edge runtime. The feed refreshes on page load, category changes, searches, and the visible **Refresh latest news** control.
+The latest-news candidate batch is capped at 20 articles to stay within Currents' free-tier request limits.
 
 ## Run locally
 

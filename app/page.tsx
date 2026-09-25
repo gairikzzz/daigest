@@ -155,7 +155,7 @@ export default function Home() {
   return <main className="editorial-app">
     <header className="masthead"><div className="masthead-inner">
       <a href="#" onClick={(event) => { event.preventDefault(); setCategory("Top stories"); setQuery(""); }} className="brand">d<span>AI</span>gest<span className="brand-dot">.</span></a>
-      <label className="search-field"><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Indian news" aria-label="Search the news"/></label>
+      <label className="search-field"><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search news worldwide" aria-label="Search news worldwide"/></label>
       <button className="header-brief" onClick={() => { setBriefing(!briefing); document.getElementById("briefing")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}><Sparkles size={15}/>Your briefing</button>
     </div></header>
     <div className="edition">
@@ -169,7 +169,7 @@ export default function Home() {
         <aside className="right-rail" id="briefing">
           <section className="briefing-card"><div className="briefing-meta"><Sparkles size={19}/><span>THE SHORT VERSION</span></div><h2>Your world,<br/>in a few minutes.</h2><p>Fresh stories to get you up to speed. Ask a little deeper on any of them.</p><button onClick={() => setBriefing(!briefing)}>{briefing ? "Close briefing" : "Catch me up"}<ArrowUpRight size={17}/></button>{briefing && <ol className="briefing-list">{briefingStories.map((story) => <li key={story.id}><strong>{story.category}</strong><p>{story.headline}</p></li>)}</ol>}<div className="briefing-foot">{briefingStories.length} stories <span>·</span> A quick read</div></section>
           <section className="rail-note"><p className="eyebrow">BEYOND THE HEADLINE</p><h3>Curiosity looks good on you.</h3><p>Ask dAIgest on any story. Your questions and replies stay with the context.</p></section>
-          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "Latest Indian headlines and search via Currents News API." : "Sample stories are shown until Currents is connected."}</p></div>
+          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "India-first latest headlines, with worldwide search via Currents." : "Sample stories are shown until Currents is connected."}</p></div>
         </aside>
       </div>
     </div>

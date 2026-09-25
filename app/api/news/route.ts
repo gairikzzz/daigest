@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 
+export const dynamic = "force-dynamic";
+
 const CATEGORY_TO_CURRENTS: Record<string, string> = {
   Business: "economy_business_finance", Technology: "science_technology",
   Entertainment: "arts_culture_entertainment", Sports: "sport",
@@ -63,6 +65,8 @@ async function filterCategoryWithOpenAI(
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         model: "gpt-6-luna",
         reasoning: { effort: "none" },
@@ -143,7 +147,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const response = await fetch(upstream, { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } });
+    const response = await fetch(upstream, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12000),
+    });
     const payload = await response.json() as { news?: CurrentsArticle[]; message?: string; msg?: string };
     if (!response.ok) {
       return Response.json(
@@ -168,7 +176,7 @@ export async function GET(request: Request) {
     });
     return Response.json(
       { configured: true, stories, fetchedAt: new Date().toISOString(), categoryChecked: !isSearch && CLASSIFIED_CATEGORIES.has(category) },
-      { headers: { "Cache-Control": "public, max-age=180, s-maxage=900, stale-while-revalidate=1800" } },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", Pragma: "no-cache" } },
     );
   } catch {
     return Response.json({ configured: true, stories: [], error: "Currents is temporarily unavailable." }, { status: 502, headers: { "Cache-Control": "no-store" } });

@@ -165,7 +165,7 @@ export default function Home() {
       <Tabs value={category} onValueChange={(nextCategory) => { setCategory(nextCategory); setQuery(""); }} className="category-nav"><TabsList className="category-list"><TabsTrigger value="Top stories" className="category-tab">Top stories</TabsTrigger>{categories.map((name) => <TabsTrigger key={name} value={name} className="category-tab">{name}</TabsTrigger>)}</TabsList></Tabs>
       <div className="editorial-layout">
         <section className={`feed ${loading ? "is-loading" : ""}`} aria-label="News feed" aria-busy={loading}>
-          {feedError && <div className="feed-notice">Live refresh paused. Showing the last available stories.</div>}
+          {feedError && <div className="feed-notice">Live refresh paused: {feedError}</div>}
           {visible.length ? visible.map((story) => <StoryCard key={story.id} story={story}/>) : <div className="empty-feed"><ImageIcon size={25}/><h2>No stories found</h2><p>{query ? "Try a broader search." : "Check this category again shortly."}</p><button onClick={() => { setCategory("Top stories"); setQuery(""); }}>Back to top stories</button></div>}
         </section>
         <aside className="right-rail" id="briefing">

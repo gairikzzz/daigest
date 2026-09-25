@@ -159,7 +159,7 @@ export default function Home() {
       <button className="header-brief" onClick={() => { setBriefing(!briefing); document.getElementById("briefing")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}><Sparkles size={15}/>Your briefing</button>
     </div></header>
     <div className="edition">
-      <div className="edition-heading"><div><p className="eyebrow">A LITTLE NEWS. A LOT MORE CONTEXT.</p><h1>Read less. <span>Understand more.</span></h1></div><span className={`feed-status ${usingLive ? "is-live" : ""}`}><i/>{loading ? "Refreshing…" : usingLive ? "Live via NewsData" : "Demo fallback"}</span></div>
+      <div className="edition-heading"><div><p className="eyebrow">A LITTLE NEWS. A LOT MORE CONTEXT.</p><h1>Read less. <span>Understand more.</span></h1></div><span className={`feed-status ${usingLive ? "is-live" : ""}`}><i/>{loading ? "Refreshing…" : usingLive ? "Live via Currents" : "Demo fallback"}</span></div>
       <Tabs value={category} onValueChange={setCategory} className="category-nav"><TabsList className="category-list"><TabsTrigger value="Top stories" className="category-tab">Top stories</TabsTrigger>{categories.map((name) => <TabsTrigger key={name} value={name} className="category-tab">{name}</TabsTrigger>)}</TabsList></Tabs>
       <div className="editorial-layout">
         <section className={`feed ${loading ? "is-loading" : ""}`} aria-label="News feed" aria-busy={loading}>
@@ -169,7 +169,7 @@ export default function Home() {
         <aside className="right-rail" id="briefing">
           <section className="briefing-card"><div className="briefing-meta"><Sparkles size={19}/><span>THE SHORT VERSION</span></div><h2>Your world,<br/>in a few minutes.</h2><p>Fresh stories to get you up to speed. Ask a little deeper on any of them.</p><button onClick={() => setBriefing(!briefing)}>{briefing ? "Close briefing" : "Catch me up"}<ArrowUpRight size={17}/></button>{briefing && <ol className="briefing-list">{briefingStories.map((story) => <li key={story.id}><strong>{story.category}</strong><p>{story.headline}</p></li>)}</ol>}<div className="briefing-foot">{briefingStories.length} stories <span>·</span> A quick read</div></section>
           <section className="rail-note"><p className="eyebrow">BEYOND THE HEADLINE</p><h3>Curiosity looks good on you.</h3><p>Ask dAIgest on any story. Your questions and replies stay with the context.</p></section>
-          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "Latest Indian headlines and search via NewsData.io." : "Sample stories are shown until NewsData is connected."}</p></div>
+          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "Latest Indian headlines and search via Currents News API." : "Sample stories are shown until Currents is connected."}</p></div>
         </aside>
       </div>
     </div>

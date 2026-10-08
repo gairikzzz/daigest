@@ -3,12 +3,77 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Clock3, ImageIcon, RefreshCw, Search, Send, Sparkles, UserRound } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type Story = {
-  id: string | number; category: string; time?: string; publishedAt?: string; headline: string; digest: string;
+  id: string | number; category: string; time?: string; publishedAt?: string; updatedAt?: string; headline: string; digest: string;
   why: string; sources: string[]; questions: string[]; sourceDomain?: string; sourceUrl?: string;
-  image?: string | null; live?: boolean;
+  image?: string | null; live?: boolean; secondaryCategories?: string[]; rankScore?: number;
 };
+
+const ASK_API_BASE = (process.env.NEXT_PUBLIC_ASK_API_BASE ?? "").replace(/\/$/, "");
+
+function apiUrl(path: string) {
+  return `${ASK_API_BASE}${path}`;
+}
+
+function getSessionId() {
+  const key = "daigest-session-id";
+  const existing = window.sessionStorage.getItem(key);
+  if (existing) return existing;
+  const created = window.crypto.randomUUID();
+  window.sessionStorage.setItem(key, created);
+  return created;
+}
+
+function normalizeStory(value: unknown): Story | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const headline = String(item.headline ?? item.title ?? "").trim();
+  const digest = String(item.card_summary ?? item.cardSummary ?? item.digest ?? item.body ?? item.summary ?? "").trim();
+  if (!headline || !digest) return null;
+  const sourceRecords = Array.isArray(item.sources) ? item.sources : [];
+  const sources = sourceRecords.length
+    ? sourceRecords.map((source) => typeof source === "string" ? source : String((source as Record<string, unknown>)?.name ?? "")).filter(Boolean)
+    : [String(item.source ?? item.publisher ?? "News source")];
+  const firstSource = typeof sourceRecords[0] === "object" && sourceRecords[0] !== null
+    ? sourceRecords[0] as Record<string, unknown>
+    : undefined;
+  const questionValues = item.questions ?? item.starterQuestions ?? item.starter_questions;
+  const questions = Array.isArray(questionValues)
+    ? questionValues.map(String).filter(Boolean)
+    : ["What happened?", "Why is this important?", "What happens next?"];
+  return {
+    id: String(item.id ?? item.storyId ?? item.providerId ?? headline),
+    // The UI tag and category tabs are both driven by the model's single
+    // primary category. A provider/raw category is only a final legacy fallback.
+    category: String(item.primary_category ?? item.primaryCategory ?? item.category ?? "India"),
+    secondaryCategories: Array.isArray(item.secondaryCategories ?? item.secondary_categories)
+      ? (item.secondaryCategories ?? item.secondary_categories as unknown[]).map(String)
+      : [],
+    publishedAt: String(item.publishedAt ?? item.published_at ?? item.updatedAt ?? item.updated_at ?? new Date().toISOString()),
+    updatedAt: String(item.updatedAt ?? item.updated_at ?? item.publishedAt ?? item.published_at ?? new Date().toISOString()),
+    rankScore: Number(item.rankScore ?? item.rank_score ?? 0) || 0,
+    headline,
+    digest,
+    why: String(item.why ?? item.whyItMatters ?? digest),
+    sources: sources.length ? sources : ["News source"],
+    questions: questions.length ? questions : ["What happened?", "Why is this important?", "What happens next?"],
+    sourceDomain: String(item.sourceDomain ?? item.source_domain ?? firstSource?.domain ?? "") || undefined,
+    sourceUrl: String(item.sourceUrl ?? item.source_url ?? item.url ?? firstSource?.url ?? "") || undefined,
+    image: String(item.image ?? item.imageUrl ?? item.image_url ?? "") || null,
+    live: true,
+  };
+}
+
+function sortStories(stories: Story[]) {
+  return [...stories].sort((left, right) => {
+    const importance = (right.rankScore ?? 0) - (left.rankScore ?? 0);
+    if (importance !== 0) return importance;
+    return new Date(right.updatedAt ?? right.publishedAt ?? 0).getTime()
+      - new Date(left.updatedAt ?? left.publishedAt ?? 0).getTime();
+  });
+}
 
 const sampleStories: Story[] = [
   { id: 1, category: "World", time: "18 min ago", headline: "BRICS nations advance a shared cross-border payments framework", digest: "Finance ministers from BRICS countries have agreed to test a common settlement network designed to make trade payments faster and less dependent on existing Western-led infrastructure.", why: "A workable alternative could reshape how emerging economies trade and reduce transaction costs — but it also raises questions about regulation, trust and geopolitical influence.", sources: ["Reuters", "The Hindu", "BBC"], sourceDomain: "reuters.com", questions: ["What is BRICS?", "Why does this matter to India?", "How is this different from SWIFT?"] },
@@ -86,23 +151,16 @@ function StoryCard({ story }: { story: Story }) {
     const question = value.trim();
     if (!question || asking) return;
     const id = `${Date.now()}-${Math.random()}`;
-    const priorTurns = turns.filter((turn) => !turn.pending);
     setInput("");
     setAsking(true);
     setTurns((current) => [...current, { id, question, answer: "Thinking…", pending: true }]);
     try {
-      const response = await fetch("/api/ask", {
+      if (!ASK_API_BASE) throw new Error("Ask dAIgest is not configured yet.");
+      const response = await fetch(apiUrl("/api/ask"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({
-          question,
-          story: {
-            headline: story.headline, digest: story.digest, category: story.category,
-            source: story.sources[0], sourceUrl: story.sourceUrl, publishedAt: story.publishedAt,
-          },
-          history: priorTurns.map((turn) => ({ question: turn.question, answer: turn.answer })),
-        }),
+        body: JSON.stringify({ storyId: String(story.id), question, sessionId: getSessionId() }),
       });
       const payload = await response.json() as { answer?: string; citations?: Citation[]; error?: string };
       if (!response.ok || !payload.answer) throw new Error(payload.error || "Could not answer that question.");
@@ -138,14 +196,11 @@ function StoryCard({ story }: { story: Story }) {
   </article>;
 }
 
-type NewsResponse = { configured: boolean; stories: Story[]; error?: string };
-
 export default function Home() {
   const [category, setCategory] = useState("Top stories");
   const [query, setQuery] = useState("");
   const [briefing, setBriefing] = useState(false);
   const [liveStories, setLiveStories] = useState<Story[]>([]);
-  const [configured, setConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedError, setFeedError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -156,33 +211,72 @@ export default function Home() {
       setLoading(true);
       setFeedError("");
       try {
-        const params = new URLSearchParams({ category });
-        if (query.trim()) params.set("q", query.trim());
-        params.set("_", String(Date.now()));
-        const response = await fetch(`/api/news?${params}`, { signal: controller.signal, cache: "no-store" });
-        const payload = await response.json() as NewsResponse;
-        setConfigured(payload.configured);
-        if (!response.ok) throw new Error(payload.error || "Could not refresh the feed.");
-        setLiveStories(payload.stories || []);
+        if (!supabase) throw new Error("Supabase is not configured.");
+        let result = await supabase
+          .from("stories_live")
+          .select("*")
+          .eq("status", "published")
+          .order("rank_score", { ascending: false, nullsFirst: false })
+          .order("updated_at", { ascending: false })
+          .limit(60)
+          .abortSignal(controller.signal);
+        if (result.error?.code === "42703") {
+          result = await supabase
+            .from("stories_live")
+            .select("*")
+            .eq("status", "published")
+            .order("published_at", { ascending: false })
+            .limit(60)
+            .abortSignal(controller.signal);
+        }
+        if (result.error) throw result.error;
+        setLiveStories(sortStories((result.data ?? []).map(normalizeStory).filter((story): story is Story => Boolean(story))));
       } catch (error) {
         if ((error as Error).name !== "AbortError") setFeedError((error as Error).message);
       } finally { if (!controller.signal.aborted) setLoading(false); }
-    }, query.trim() ? 450 : 0);
+    }, 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [category, query, refreshKey]);
+  }, [refreshKey]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel("daigest-stories-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "stories_live" }, (payload) => {
+        const oldId = String((payload.old as Record<string, unknown> | null)?.id ?? "");
+        const next = normalizeStory(payload.new);
+        setLiveStories((current) => {
+          if (payload.eventType === "DELETE" || !next || (payload.new as Record<string, unknown>)?.status !== "published") {
+            return oldId ? current.filter((story) => String(story.id) !== oldId) : current;
+          }
+          const withoutCurrent = current.filter((story) => String(story.id) !== String(next.id));
+          return sortStories([next, ...withoutCurrent]);
+        });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, []);
 
   const fallbackStories = useMemo(() => sampleStories.filter((story) =>
     (category === "Top stories" || story.category === category || (category === "India" && story.headline.includes("India"))) &&
     (`${story.headline} ${story.digest}`).toLowerCase().includes(query.toLowerCase())
   ), [category, query]);
-  const usingLive = configured === true && !feedError;
-  const visible = usingLive ? liveStories : fallbackStories;
+  const usingLive = isSupabaseConfigured && !feedError;
+  const categoryStories = category === "Top stories"
+    ? liveStories
+    : liveStories.filter((story) => story.category === category);
+  const visibleSource = usingLive ? categoryStories : fallbackStories;
+  const visible = query.trim()
+    ? visibleSource.filter((story) => `${story.headline} ${story.digest} ${story.sources.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()))
+    : visibleSource;
   const briefingStories = visible.length ? visible.slice(0, 4) : sampleStories;
 
   return <main className="editorial-app">
     <header className="masthead"><div className="masthead-inner">
       <a href="#" onClick={(event) => { event.preventDefault(); setCategory("Top stories"); setQuery(""); }} className="brand">d<span>AI</span>gest<span className="brand-dot">.</span></a>
-      <label className="search-field"><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search news worldwide" aria-label="Search news worldwide"/></label>
+      <label className="search-field"><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search loaded stories" aria-label="Search loaded stories"/></label>
       <button className="header-brief" onClick={() => { setBriefing(!briefing); document.getElementById("briefing")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}><Sparkles size={15}/>Your briefing</button>
     </div></header>
     <div className="edition">
@@ -196,7 +290,7 @@ export default function Home() {
         <aside className="right-rail" id="briefing">
           <section className="briefing-card"><div className="briefing-meta"><Sparkles size={19}/><span>THE SHORT VERSION</span></div><h2>Your world,<br/>in a few minutes.</h2><p>Fresh stories to get you up to speed. Ask a little deeper on any of them.</p><button onClick={() => setBriefing(!briefing)}>{briefing ? "Close briefing" : "Catch me up"}<ArrowUpRight size={17}/></button>{briefing && <ol className="briefing-list">{briefingStories.map((story) => <li key={story.id}><strong>{story.category}</strong><p>{story.headline}</p></li>)}</ol>}<div className="briefing-foot">{briefingStories.length} stories <span>·</span> A quick read</div></section>
           <section className="rail-note"><p className="eyebrow">BEYOND THE HEADLINE</p><h3>Curiosity looks good on you.</h3><p>Ask dAIgest on any story. Your questions and replies stay with the context.</p></section>
-          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "India-first latest headlines, with worldwide search via Currents." : "Sample stories are shown until Currents is connected."}</p></div>
+          <div className="rail-footer"><span className="small-brand">dAIgest.</span><p>{usingLive ? "India-first reporting, prepared in Supabase by dAIgest." : "Sample stories are shown until Supabase is connected."}</p></div>
         </aside>
       </div>
     </div>
